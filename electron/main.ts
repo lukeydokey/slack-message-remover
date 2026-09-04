@@ -20,10 +20,6 @@ const scopes = [
   'mpim:read',
   'users:read'
 ]
-const conversationReadScopes = [
-  'channels:read', 'groups:read', 'im:read', 'mpim:read'
-] as const
-
 const scanSessionTtlMs = 60 * 60 * 1000
 const credentialPath = () => join(app.getPath('userData'), 'slack-credential.bin')
 const scanSessions = new Map<string, { createdAt: number; messageKeys: Set<string> }>()
@@ -187,28 +183,6 @@ async function slack<T extends SlackApiEnvelope>(method: string, token: string, 
   const data = await response.json() as T
   if (!data.ok) throw genericSlackError(data.error)
   return data
-}
-
-async function assertConversationReadScopes(token: string): Promise<void> {
-  const response = await fetch('https://slack.com/api/auth.test', {
-    headers: { Authorization: 'Bearer ' + token }
-  })
-  const grantedScopeHeader = response.headers.get('x-oauth-scopes')
-
-  // Slack normally sends this header. Avoid blocking users on a proxy that
-  // strips it; the subsequent API request remains the final authority.
-  if (!grantedScopeHeader) return
-
-  const grantedScopes = new Set(
-    grantedScopeHeader.split(',').map((scope) => scope.trim()).filter(Boolean)
-  )
-  const missingScopes = conversationReadScopes.filter((scope) => !grantedScopes.has(scope))
-  if (missingScopes.length > 0) {
-    throw new Error(
-      'Direct-message/private-channel permission is missing (' + missingScopes.join(', ') + '). ' +
-      'Disconnect, then connect Slack again after the administrator reinstalls the updated app.'
-    )
-  }
 }
 
 async function fetchReplyMessages(token: string, channelId: string, rootTs: string): Promise<SlackMessage[]> {
@@ -400,7 +374,6 @@ app.whenReady().then(() => {
     const credential = await requireCredential()
     const conversations: SlackConversation[] = []
     const userNames = new Map<string, string>()
-    await assertConversationReadScopes(credential.accessToken)
     let userCursor: string | undefined
 
     try {
