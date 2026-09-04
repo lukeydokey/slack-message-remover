@@ -17,13 +17,15 @@ const scopes = [
   'im:history',
   'im:read',
   'mpim:history',
-  'mpim:read'
+  'mpim:read',
+  'users:read'
 ]
 const scanSessionTtlMs = 60 * 60 * 1000
 const credentialPath = () => join(app.getPath('userData'), 'slack-credential.bin')
 const scanSessions = new Map<string, { createdAt: number; messageKeys: Set<string> }>()
 let deleteInProgress = false
 let cancelCurrentDelete = false
+let cancelPendingConnect: (() => void) | undefined
 
 interface Credential {
   clientId: string
@@ -158,7 +160,7 @@ async function requireCredential(): Promise<Credential> {
 async function status(): Promise<ConnectionStatus> {
   const credential = await readCredentialFile()
   return credential
-    ? { connected: true, userId: credential.userId, userName: credential.userName, teamName: credential.teamName }
+    ? { connected: true, clientId: credential.clientId, userId: credential.userId, userName: credential.userName, teamName: credential.teamName }
     : { connected: false }
 }
 
@@ -245,6 +247,7 @@ async function fetchConversationMessages(token: string, channelId: string, reque
 }
 
 async function connect(clientIdValue: unknown): Promise<ConnectionStatus> {
+  cancelPendingConnect?.()
   const clientId = validateClientId(clientIdValue)
   const verifier = createVerifier()
   const state = base64Url(randomBytes(24))
@@ -260,6 +263,14 @@ async function connect(clientIdValue: unknown): Promise<ConnectionStatus> {
   }).toString()
 
   return new Promise((resolve, reject) => {
+    let finished = false
+    const finish = (callback: () => void): void => {
+      if (finished) return
+      finished = true
+      cancelPendingConnect = undefined
+      server.close()
+      callback()
+    }
     const server = createServer(async (request, response) => {
       const url = new URL(request.url ?? '/', callbackUrl)
       const code = url.searchParams.get('code')
@@ -268,8 +279,7 @@ async function connect(clientIdValue: unknown): Promise<ConnectionStatus> {
       response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
       if (!code || returnedState !== state) {
         response.end('<h2>Slack 연결 실패</h2><p>이 창을 닫고 앱에서 다시 시도해 주세요.</p>')
-        server.close()
-        reject(new Error('Slack 로그인 확인에 실패했습니다.'))
+        finish(() => reject(new Error('Slack 로그인 확인에 실패했습니다.')))
         return
       }
 
@@ -292,16 +302,15 @@ async function connect(clientIdValue: unknown): Promise<ConnectionStatus> {
         })
 
         response.end('<h2>Slack 연결 완료</h2><p>이 창을 닫고 앱으로 돌아가세요.</p>')
-        server.close()
-        resolve(await status())
+        finish(() => { void status().then(resolve) })
       } catch {
         response.end('<h2>Slack 연결 실패</h2><p>이 창을 닫고 앱에서 다시 시도해 주세요.</p>')
-        server.close()
-        reject(new Error('Slack 인증 정보를 저장하지 못했습니다. 관리자 설정을 확인해 주세요.'))
+        finish(() => reject(new Error('Slack 인증 정보를 저장하지 못했습니다. 관리자 설정을 확인해 주세요.')))
       }
     })
 
-    server.once('error', () => reject(new Error('로그인 수신 포트를 열 수 없습니다. 잠시 후 다시 시도해 주세요.')))
+    cancelPendingConnect = () => finish(() => reject(new Error('Slack 인증을 취소했습니다. 다시 시도할 수 있습니다.')))
+    server.once('error', () => finish(() => reject(new Error('로그인 수신 포트를 열 수 없습니다. 잠시 후 다시 시도해 주세요.'))))
     server.listen(callbackPort, '127.0.0.1', () => {
       void shell.openExternal(authorization.toString())
     })
@@ -353,6 +362,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('slack:getStatus', status)
   ipcMain.handle('slack:connect', (_event, clientId: unknown) => connect(clientId))
+  ipcMain.handle('slack:cancelConnect', async () => cancelPendingConnect?.())
   ipcMain.handle('slack:disconnect', async () => {
     scanSessions.clear()
     await removeCredential()
@@ -363,11 +373,28 @@ app.whenReady().then(() => {
   ipcMain.handle('slack:listConversations', async (): Promise<SlackConversation[]> => {
     const credential = await requireCredential()
     const conversations: SlackConversation[] = []
+    const userNames = new Map<string, string>()
+    let userCursor: string | undefined
+
+    try {
+      do {
+        const users = await slack<SlackApiEnvelope & {
+          members: Array<{ id: string; profile?: { display_name?: string; real_name?: string }; real_name?: string }>
+          response_metadata?: { next_cursor?: string }
+        }>('users.list', credential.accessToken, { limit: 200, ...(userCursor ? { cursor: userCursor } : {}) })
+        users.members.forEach((member) => userNames.set(member.id, member.profile?.display_name || member.profile?.real_name || member.real_name || member.id))
+        userCursor = users.response_metadata?.next_cursor || undefined
+      } while (userCursor)
+    } catch {
+      // A legacy app may not yet have users:read. Keep loading DM conversations
+      // and fall back to the Slack conversation ID until it is reinstalled.
+    }
+
     let cursor: string | undefined
 
     do {
       const data = await slack<SlackApiEnvelope & {
-        channels: Array<{ id: string; name?: string; is_im?: boolean; is_mpim?: boolean; is_private?: boolean }>
+        channels: Array<{ id: string; name?: string; user?: string; is_im?: boolean; is_mpim?: boolean; is_private?: boolean }>
         response_metadata?: { next_cursor?: string }
       }>('conversations.list', credential.accessToken, {
         types: 'public_channel,private_channel,im,mpim',
@@ -378,7 +405,7 @@ app.whenReady().then(() => {
 
       conversations.push(...data.channels.map((channel) => ({
         id: channel.id,
-        name: channel.name ?? `DM ${channel.id}`,
+        name: channel.is_im ? (userNames.get(channel.user ?? '') ?? `DM ${channel.id}`) : (channel.name ?? `그룹 DM ${channel.id}`),
         kind: channel.is_im ? 'dm' : channel.is_mpim ? 'group_dm' : channel.is_private ? 'private_channel' : 'public_channel'
       } satisfies SlackConversation)))
       cursor = data.response_metadata?.next_cursor || undefined

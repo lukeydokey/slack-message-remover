@@ -4,6 +4,7 @@ import type { DeleteProgress, DeleteRequest, ScanRequest } from '../src/types'
 contextBridge.exposeInMainWorld('slackCleanup', {
   getStatus: () => ipcRenderer.invoke('slack:getStatus'),
   connect: (clientId: string) => ipcRenderer.invoke('slack:connect', clientId),
+  cancelConnect: () => ipcRenderer.invoke('slack:cancelConnect'),
   disconnect: () => ipcRenderer.invoke('slack:disconnect'),
   listConversations: () => ipcRenderer.invoke('slack:listConversations'),
   scan: (request: ScanRequest) => ipcRenderer.invoke('slack:scan', request),

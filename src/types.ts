@@ -14,6 +14,7 @@ export interface SlackMessage {
 
 export interface ConnectionStatus {
   connected: boolean
+  clientId?: string
   userId?: string
   userName?: string
   teamName?: string
@@ -59,6 +60,7 @@ declare global {
     slackCleanup: {
       getStatus: () => Promise<ConnectionStatus>
       connect: (clientId: string) => Promise<ConnectionStatus>
+      cancelConnect: () => Promise<void>
       disconnect: () => Promise<void>
       listConversations: () => Promise<SlackConversation[]>
       scan: (request: ScanRequest) => Promise<ScanResult>

@@ -83,6 +83,15 @@ export function App() {
     }
   }
 
+  async function cancelConnect(): Promise<void> {
+    try {
+      await window.slackCleanup.cancelConnect()
+      setNotice('Authentication cancelled. Close the browser tab, then connect again.')
+    } catch (error) {
+      showError(error)
+    }
+  }
+
   async function disconnect(): Promise<void> {
     setBusy(true)
     try {
@@ -212,6 +221,7 @@ export function App() {
             />
           </label>
           <button onClick={() => void connect()} disabled={busy || !clientId.trim()}>Slack 연결</button>
+          {busy && <button className="secondary" onClick={() => void cancelConnect()}>Cancel authentication and try again</button>}
           {notice && <p role="status" className="notice">{notice}</p>}
         </section>
       </main>
