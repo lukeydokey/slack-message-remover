@@ -7,15 +7,16 @@
   "scripts": {
     "dev": "concurrently -k \"vite\" \"npm:dev:electron\"",
     "dev:electron": "tsc -p tsconfig.electron.json && wait-on tcp:5173 && electron .",
-    "build": "tsc -p tsconfig.electron.json && vite build",
+    "build": "npm run build:app",
     "test": "set \"LOCALAPPDATA=%CD%\\.localappdata\" && vitest run",
     "test:coverage": "set \"LOCALAPPDATA=%CD%\\.localappdata\" && vitest run --coverage",
     "lint": "eslint . --max-warnings=0",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:app": "tsc -p tsconfig.electron.json && vite build",
+    "dist:win": "npm run build:app && electron-builder --win nsis --x64"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "electron": "latest",
     "react": "latest",
     "react-dom": "latest",
     "vite": "latest"
@@ -27,6 +28,8 @@
     "@types/react-dom": "latest",
     "@vitest/coverage-v8": "latest",
     "concurrently": "latest",
+    "electron": "latest",
+    "electron-builder": "latest",
     "eslint": "latest",
     "eslint-plugin-react-hooks": "latest",
     "eslint-plugin-react-refresh": "latest",
@@ -35,5 +38,28 @@
     "typescript-eslint": "latest",
     "vitest": "latest",
     "wait-on": "latest"
+  },
+  "build": {
+    "appId": "com.internal.slackmessagecleanup",
+    "productName": "Slack Message Cleanup",
+    "directories": {
+      "output": "installer"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "artifactName": "Slack-Message-Cleanup-Setup-${version}.exe"
+    }
   }
 }
