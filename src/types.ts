@@ -4,6 +4,20 @@ export interface SlackConversation {
   kind: 'public_channel' | 'private_channel' | 'dm' | 'group_dm'
 }
 
+export type SlackConversationType = 'public_channel' | 'private_channel' | 'im' | 'mpim'
+
+export interface ConversationDiagnostic {
+  type: SlackConversationType
+  count: number
+  error?: string
+}
+
+export interface ConversationListResult {
+  conversations: SlackConversation[]
+  diagnostics: ConversationDiagnostic[]
+  userDirectoryError?: string
+}
+
 export interface SlackMessage {
   channelId: string
   ts: string
@@ -62,7 +76,7 @@ declare global {
       connect: (clientId: string) => Promise<ConnectionStatus>
       cancelConnect: () => Promise<void>
       disconnect: () => Promise<void>
-      listConversations: () => Promise<SlackConversation[]>
+      listConversations: () => Promise<ConversationListResult>
       scan: (request: ScanRequest) => Promise<ScanResult>
       deleteMessages: (request: DeleteRequest) => Promise<DeleteResult>
       cancelDelete: () => Promise<void>

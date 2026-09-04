@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { buildCleanupPlan, canStartDeletion } from '../domain/cleanupPlan'
-import type { ConnectionStatus, DeleteProgress, DeleteResult, ScanResult, SlackConversation } from '../types'
+import type { ConnectionStatus, ConversationDiagnostic, DeleteProgress, DeleteResult, ScanResult, SlackConversation } from '../types'
 
 const twoDigits = (value: number): string => String(value).padStart(2, '0')
 const toInputDateTime = (date: Date): string => (
@@ -30,6 +30,7 @@ export function App() {
   const [clientId, setClientId] = useState('')
   const [conversations, setConversations] = useState<SlackConversation[]>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [diagnostics, setDiagnostics] = useState<ConversationDiagnostic[]>([])
   const [start, setStart] = useState(toInputDateTime(yesterday))
   const [end, setEnd] = useState(toInputDateTime(now))
   const [includeThreads, setIncludeThreads] = useState(false)
@@ -99,6 +100,7 @@ export function App() {
       setStatus({ connected: false })
       setConversations([])
       setSelectedIds([])
+      setDiagnostics([])
       setScan(undefined)
       setDeleteResult(undefined)
       setDeleteProgress(undefined)
@@ -115,8 +117,10 @@ export function App() {
     setDeleteResult(undefined)
     setDeleteProgress(undefined)
     try {
-      const items = await window.slackCleanup.listConversations()
+      const result = await window.slackCleanup.listConversations()
+      const items = result.conversations
       setConversations(items)
+      setDiagnostics(result.diagnostics)
       setNotice(`${items.length}개의 대화를 불러왔습니다.`)
     } catch (error) {
       showError(error)
@@ -244,6 +248,18 @@ export function App() {
           <h2>1. 대화 선택</h2>
           <button className="secondary" onClick={() => void loadConversations()} disabled={busy}>대화 목록 불러오기</button>
         </div>
+        {diagnostics.length > 0 && (
+          <details>
+            <summary>Debug: conversation API results</summary>
+            <ul>
+              {diagnostics.map((diagnostic) => (
+                <li key={diagnostic.type}>
+                  {diagnostic.type}: {diagnostic.count}{diagnostic.error ? ' - ' + diagnostic.error : ''}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
         {selectedConversations.length > 0 && (
           <p className="selection">{selectedConversations.length}개 선택됨</p>
         )}

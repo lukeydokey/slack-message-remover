@@ -4,7 +4,7 @@ import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { readFile, unlink, writeFile } from 'node:fs/promises'
 import { messageKey, validateClientId, validateDeleteRequest, validateScanRequest } from '../src/domain/ipcValidation'
-import type { ConnectionStatus, DeleteProgress, DeleteResult, ScanResult, SlackConversation, SlackMessage } from '../src/types'
+import type { ConnectionStatus, ConversationDiagnostic, ConversationListResult, DeleteProgress, DeleteResult, ScanResult, SlackConversation, SlackMessage } from '../src/types'
 
 const callbackPort = 52765
 const callbackUrl = `http://127.0.0.1:${callbackPort}/oauth/callback`
@@ -370,7 +370,7 @@ app.whenReady().then(() => {
   ipcMain.handle('slack:cancelDelete', async () => {
     cancelCurrentDelete = true
   })
-  ipcMain.handle('slack:listConversations', async (): Promise<SlackConversation[]> => {
+  ipcMain.handle('slack:listConversations', async (): Promise<ConversationListResult> => {
     const credential = await requireCredential()
     const conversations: SlackConversation[] = []
     const userNames = new Map<string, string>()
@@ -411,7 +411,17 @@ app.whenReady().then(() => {
       cursor = data.response_metadata?.next_cursor || undefined
     } while (cursor)
 
-    return conversations
+    const diagnostics: ConversationDiagnostic[] = ([
+      { type: 'public_channel', kind: 'public_channel' },
+      { type: 'private_channel', kind: 'private_channel' },
+      { type: 'im', kind: 'dm' },
+      { type: 'mpim', kind: 'group_dm' }
+    ] as const).map(({ type, kind }) => ({
+      type,
+      count: conversations.filter((conversation) => conversation.kind === kind).length
+    }))
+
+    return { conversations, diagnostics }
   })
   ipcMain.handle('slack:scan', async (_event, request: unknown): Promise<ScanResult> => {
     const credential = await requireCredential()
