@@ -165,13 +165,16 @@ async function status(): Promise<ConnectionStatus> {
 }
 
 async function slack<T extends SlackApiEnvelope>(method: string, token: string, payload?: Record<string, unknown>, retryAttempt = 0): Promise<T> {
+  const body = payload
+    ? new URLSearchParams(Object.entries(payload).map(([key, value]) => [key, String(value)])).toString()
+    : undefined
   const response = await fetch(`https://slack.com/api/${method}`, {
     method: payload ? 'POST' : 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
-      ...(payload ? { 'Content-Type': 'application/json' } : {})
+      ...(payload ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {})
     },
-    body: payload ? JSON.stringify(payload) : undefined
+    body
   })
 
   if (response.status === 429 && retryAttempt < 3) {
