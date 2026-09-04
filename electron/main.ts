@@ -343,7 +343,9 @@ function createWindow(): void {
     if (!isDevServer && !isPackagedFile) event.preventDefault()
   })
 
-  void window.loadURL(process.env.VITE_DEV_SERVER_URL ?? `file://${join(__dirname, '../../dist/index.html')}`)
+  void (process.env.VITE_DEV_SERVER_URL
+    ? window.loadURL(process.env.VITE_DEV_SERVER_URL)
+    : window.loadFile(join(__dirname, '../../dist/index.html')))
 }
 
 app.whenReady().then(() => {
