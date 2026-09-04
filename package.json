@@ -1,0 +1,39 @@
+{
+  "name": "slack-message-cleanup",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Internal desktop tool for safely deleting Slack messages the user may delete.",
+  "main": "dist-electron/electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"npm:dev:electron\"",
+    "dev:electron": "tsc -p tsconfig.electron.json && wait-on tcp:5173 && electron .",
+    "build": "tsc -p tsconfig.electron.json && vite build",
+    "test": "set \"LOCALAPPDATA=%CD%\\.localappdata\" && vitest run",
+    "test:coverage": "set \"LOCALAPPDATA=%CD%\\.localappdata\" && vitest run --coverage",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "electron": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitest/coverage-v8": "latest",
+    "concurrently": "latest",
+    "eslint": "latest",
+    "eslint-plugin-react-hooks": "latest",
+    "eslint-plugin-react-refresh": "latest",
+    "globals": "latest",
+    "typescript": "latest",
+    "typescript-eslint": "latest",
+    "vitest": "latest",
+    "wait-on": "latest"
+  }
+}

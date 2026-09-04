@@ -1,0 +1,29 @@
+{
+  "display_information": {
+    "name": "Slack Message Cleanup Internal"
+  },
+  "oauth_config": {
+    "redirect_urls": [
+      "http://127.0.0.1:52765/oauth/callback"
+    ],
+    "scopes": {
+      "user": [
+        "chat:write",
+        "channels:history",
+        "channels:read",
+        "groups:history",
+        "groups:read",
+        "im:history",
+        "im:read",
+        "mpim:history",
+        "mpim:read"
+      ]
+    },
+    "pkce_enabled": true
+  },
+  "settings": {
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": true
+  }
+}

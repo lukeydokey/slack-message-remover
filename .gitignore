@@ -1,0 +1,7 @@
+node_modules/
+dist/
+dist-electron/
+coverage/
+.localappdata/
+*.log
+.DS_Store
