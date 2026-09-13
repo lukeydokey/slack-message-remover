@@ -25,6 +25,11 @@ export function validateScanRequest(value: unknown): ScanRequest {
   const start = value.start
   const end = value.end
   const includeThreadReplies = value.includeThreadReplies
+  const excludeFileMessages = value.excludeFileMessages
+
+  if (excludeFileMessages !== undefined && typeof excludeFileMessages !== 'boolean') {
+    throw new Error('파일 첨부 메시지 제외 설정을 다시 확인해 주세요.')
+  }
 
   if (!Array.isArray(channelIds) || channelIds.length === 0 || channelIds.length > 100) {
     throw new Error('대화는 1개 이상 100개 이하로 선택해 주세요.')
@@ -47,7 +52,8 @@ export function validateScanRequest(value: unknown): ScanRequest {
     channelIds: [...new Set(channelIds)],
     start,
     end,
-    includeThreadReplies: includeThreadReplies === true
+    includeThreadReplies: includeThreadReplies === true,
+    excludeFileMessages: excludeFileMessages !== false
   }
 }
 
@@ -76,7 +82,7 @@ export function validateSlackMessage(value: unknown): SlackMessage {
     throw new Error('삭제 요청에 잘못된 메시지가 포함되어 있습니다.')
   }
 
-  return { channelId, ts, userId, text, isThreadReply: isThreadReply === true }
+  return { channelId, ts, userId, text, isThreadReply: isThreadReply === true, hasFiles: value.hasFiles === true }
 }
 
 export function validateDeleteRequest(value: unknown): DeleteRequest {

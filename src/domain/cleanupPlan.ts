@@ -1,15 +1,12 @@
-export interface CleanupMessage {
-  channelId: string
-  ts: string
-  userId: string
-  text: string
-  isThreadReply: boolean
-}
+import type { SlackMessage } from '../types'
+
+export type CleanupMessage = SlackMessage
 
 export interface CleanupPlanInput {
   connectedUserId: string
   range: { start: string; end: string }
   includeThreadReplies: boolean
+  excludeFileMessages: boolean
   messages: readonly CleanupMessage[]
 }
 
@@ -28,6 +25,7 @@ export function buildCleanupPlan(input: CleanupPlanInput): CleanupPlan {
     message.userId === input.connectedUserId
       && isWithinRange(message.ts, input.range.start, input.range.end)
       && (input.includeThreadReplies || !message.isThreadReply)
+      && (!input.excludeFileMessages || !message.hasFiles)
   ))
 
   return {

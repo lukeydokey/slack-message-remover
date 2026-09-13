@@ -8,11 +8,12 @@ describe('buildCleanupPlan', () => {
       connectedUserId: 'U1',
       range: { start: '2026-09-01T00:00:00.000Z', end: '2026-09-02T00:00:00.000Z' },
       includeThreadReplies: false,
+      excludeFileMessages: true,
       messages: [
-        { channelId: 'C1', ts: '1788220800.000001', userId: 'U1', text: 'keep', isThreadReply: false },
-        { channelId: 'C1', ts: '1788307200.000001', userId: 'U1', text: 'outside', isThreadReply: false },
-        { channelId: 'C1', ts: '1788220801.000001', userId: 'U2', text: 'other user', isThreadReply: false },
-        { channelId: 'C1', ts: '1788220802.000001', userId: 'U1', text: 'thread', isThreadReply: true }
+        { channelId: 'C1', ts: '1788220800.000001', userId: 'U1', text: 'keep', isThreadReply: false, hasFiles: false },
+        { channelId: 'C1', ts: '1788307200.000001', userId: 'U1', text: 'outside', isThreadReply: false, hasFiles: false },
+        { channelId: 'C1', ts: '1788220801.000001', userId: 'U2', text: 'other user', isThreadReply: false, hasFiles: false },
+        { channelId: 'C1', ts: '1788220802.000001', userId: 'U1', text: 'thread', isThreadReply: true, hasFiles: false }
       ]
     })
 
@@ -49,7 +50,7 @@ describe('IPC validation', () => {
   })
 
   it('requires delete requests to match the confirmed count and contain unique messages', () => {
-    const message = { channelId: 'C123ABC', ts: '1788220800.000001', userId: 'U123ABC', text: 'hello', isThreadReply: false }
+    const message = { channelId: 'C123ABC', ts: '1788220800.000001', userId: 'U123ABC', text: 'hello', isThreadReply: false, hasFiles: false }
     const request = validateDeleteRequest({
       scanId: '123e4567-e89b-12d3-a456-426614174000',
       messages: [message],

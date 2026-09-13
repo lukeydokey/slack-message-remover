@@ -24,6 +24,7 @@ export interface SlackMessage {
   userId: string
   text: string
   isThreadReply: boolean
+  hasFiles: boolean
 }
 
 export interface ConnectionStatus {
@@ -40,6 +41,7 @@ export interface ScanRequest {
   start: string
   end: string
   includeThreadReplies: boolean
+  excludeFileMessages: boolean
 }
 
 export interface ScanResult {

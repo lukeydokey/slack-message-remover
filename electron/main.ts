@@ -4,6 +4,9 @@ import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { readFile, unlink, writeFile } from 'node:fs/promises'
 import { messageKey, validateClientId, validateDeleteRequest, validateScanRequest } from '../src/domain/ipcValidation'
+import { buildCleanupPlan } from '../src/domain/cleanupPlan'
+import { toSlackMessage } from '../src/domain/slackMessage'
+import type { RawSlackMessage } from '../src/domain/slackMessage'
 import type { ConnectionStatus, ConversationDiagnostic, ConversationListResult, DeleteProgress, DeleteResult, ScanResult, SlackConversation, SlackMessage } from '../src/types'
 
 const callbackPort = 52765
@@ -194,19 +197,13 @@ async function fetchReplyMessages(token: string, channelId: string, rootTs: stri
 
   do {
     const data = await slack<SlackApiEnvelope & {
-      messages: Array<{ ts: string; user?: string; text?: string }>
+      messages: RawSlackMessage[]
       response_metadata?: { next_cursor?: string }
     }>('conversations.replies', token, { channel: channelId, ts: rootTs, limit: 1000, ...(cursor ? { cursor } : {}) })
 
     replies.push(...data.messages
       .filter((reply) => reply.ts !== rootTs)
-      .map((reply) => ({
-        channelId,
-        ts: reply.ts,
-        userId: reply.user ?? '',
-        text: reply.text ?? '',
-        isThreadReply: true
-      })))
+      .map((reply) => toSlackMessage(channelId, reply, true)))
     cursor = data.response_metadata?.next_cursor || undefined
   } while (cursor)
 
@@ -219,7 +216,7 @@ async function fetchConversationMessages(token: string, channelId: string, reque
 
   do {
     const data = await slack<SlackApiEnvelope & {
-      messages: Array<{ ts: string; user?: string; text?: string; thread_ts?: string; reply_count?: number }>
+      messages: RawSlackMessage[]
       response_metadata?: { next_cursor?: string }
     }>('conversations.history', token, {
       channel: channelId,
@@ -230,13 +227,7 @@ async function fetchConversationMessages(token: string, channelId: string, reque
       ...(cursor ? { cursor } : {})
     })
 
-    messages.push(...data.messages.map((message) => ({
-      channelId,
-      ts: message.ts,
-      userId: message.user ?? '',
-      text: message.text ?? '',
-      isThreadReply: false
-    })))
+    messages.push(...data.messages.map((message) => toSlackMessage(channelId, message)))
 
     if (request.includeThreadReplies) {
       const roots = data.messages.filter((message) => (message.reply_count ?? 0) > 0 || message.thread_ts === message.ts)
@@ -441,7 +432,15 @@ app.whenReady().then(() => {
       }
     }
 
-    return { scanId: createScanSession(messages), messages, inaccessibleChannelIds }
+    const plan = buildCleanupPlan({
+      connectedUserId: credential.userId,
+      range: { start: validatedRequest.start, end: validatedRequest.end },
+      includeThreadReplies: validatedRequest.includeThreadReplies,
+      excludeFileMessages: validatedRequest.excludeFileMessages,
+      messages
+    })
+    const candidates = [...plan.candidates]
+    return { scanId: createScanSession(candidates), messages: candidates, inaccessibleChannelIds }
   })
   ipcMain.handle('slack:deleteMessages', async (_event, request: unknown): Promise<DeleteResult> => {
     if (deleteInProgress) throw new Error('이미 삭제 작업이 진행 중입니다.')

@@ -34,6 +34,7 @@ export function App() {
   const [start, setStart] = useState(toInputDateTime(yesterday))
   const [end, setEnd] = useState(toInputDateTime(now))
   const [includeThreads, setIncludeThreads] = useState(false)
+  const [excludeFileMessages, setExcludeFileMessages] = useState(true)
   const [scan, setScan] = useState<ScanResult>()
   const [acknowledged, setAcknowledged] = useState(false)
   const [typedCount, setTypedCount] = useState('')
@@ -63,9 +64,10 @@ export function App() {
       connectedUserId: status.userId,
       range: { start: startIso, end: endIso },
       includeThreadReplies: includeThreads,
+      excludeFileMessages,
       messages: scan.messages
     })
-  }, [scan, status.userId, start, end, includeThreads])
+  }, [scan, status.userId, start, end, includeThreads, excludeFileMessages])
 
   function showError(error: unknown): void {
     setNotice(error instanceof Error ? error.message : '작업을 완료하지 못했습니다.')
@@ -151,7 +153,8 @@ export function App() {
         channelIds: selectedIds,
         start: startIso,
         end: endIso,
-        includeThreadReplies: includeThreads
+        includeThreadReplies: includeThreads,
+        excludeFileMessages
       }))
       setNotice('삭제하지 않고 미리보기만 생성했습니다.')
     } catch (error) {
@@ -200,6 +203,16 @@ export function App() {
     setScan(undefined)
     setDeleteResult(undefined)
     setDeleteProgress(undefined)
+  }
+
+  function changeFileExclusion(exclude: boolean): void {
+    setExcludeFileMessages(exclude)
+    setScan(undefined)
+    setAcknowledged(false)
+    setTypedCount('')
+    setDeleteResult(undefined)
+    setDeleteProgress(undefined)
+    setNotice('파일 첨부 메시지 제외 설정을 변경했습니다. 미리보기를 다시 생성해 주세요.')
   }
 
   if (!status.connected) {
@@ -294,6 +307,16 @@ export function App() {
           <input type="checkbox" checked={includeThreads} onChange={(event) => setIncludeThreads(event.target.checked)} />
           스레드 답글 포함
         </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={excludeFileMessages}
+            onChange={(event) => changeFileExclusion(event.target.checked)}
+            disabled={busy}
+          />
+          파일 첨부 메시지 제외
+        </label>
+        <p className="hint">기본으로 켜져 있습니다. 사진·문서 등 파일이 첨부된 메시지는 스레드 답글도 삭제 대상에서 제외합니다.</p>
         <button onClick={() => void preview()} disabled={busy}>삭제 대상 미리보기</button>
       </section>
 

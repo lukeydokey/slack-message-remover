@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [react()],
   build: { outDir: 'dist' },
   test: {
-    api: false
+    api: false,
+    include: ['src/**/*.test.{ts,tsx}', 'electron/**/*.test.ts']
   }
 })
