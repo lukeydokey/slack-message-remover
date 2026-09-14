@@ -1,6 +1,6 @@
 {
   "name": "slack-message-cleanup",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Internal desktop tool for safely deleting Slack messages the user may delete.",
   "main": "dist-electron/electron/main.js",

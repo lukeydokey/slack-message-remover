@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildCleanupPlan, canStartDeletion } from '../domain/cleanupPlan'
+import { messageKey } from '../domain/ipcValidation'
+import { clearPreviewSelection, createPreviewSelection, selectedPreviewMessages, selectAllPreviewMessages, togglePreviewMessage } from '../domain/previewSelection'
 import type { ConnectionStatus, ConversationDiagnostic, DeleteProgress, DeleteResult, ScanResult, SlackConversation } from '../types'
 
 const twoDigits = (value: number): string => String(value).padStart(2, '0')
@@ -36,6 +38,7 @@ export function App() {
   const [includeThreads, setIncludeThreads] = useState(false)
   const [excludeFileMessages, setExcludeFileMessages] = useState(true)
   const [scan, setScan] = useState<ScanResult>()
+  const [selectedMessageKeys, setSelectedMessageKeys] = useState<string[]>([])
   const [acknowledged, setAcknowledged] = useState(false)
   const [typedCount, setTypedCount] = useState('')
   const [notice, setNotice] = useState('')
@@ -43,6 +46,7 @@ export function App() {
   const [deleteProgress, setDeleteProgress] = useState<DeleteProgress>()
   const [isDeleting, setIsDeleting] = useState(false)
   const [busy, setBusy] = useState(false)
+  const previewGeneration = useRef(0)
 
   useEffect(() => {
     void window.slackCleanup.getStatus().then(setStatus).catch(showError)
@@ -68,6 +72,53 @@ export function App() {
       messages: scan.messages
     })
   }, [scan, status.userId, start, end, includeThreads, excludeFileMessages])
+
+  const selectedMessages = useMemo(
+    () => plan ? selectedPreviewMessages(plan.candidates, selectedMessageKeys) : [],
+    [plan, selectedMessageKeys]
+  )
+  const allPreviewMessagesSelected = Boolean(plan?.candidates.length) && selectedMessages.length === plan?.candidates.length
+  const somePreviewMessagesSelected = selectedMessages.length > 0 && !allPreviewMessagesSelected
+
+  function invalidatePreview(): void {
+    previewGeneration.current += 1
+    setScan(undefined)
+    setSelectedMessageKeys(clearPreviewSelection())
+    setAcknowledged(false)
+    setTypedCount('')
+    setDeleteResult(undefined)
+    setDeleteProgress(undefined)
+  }
+
+  function changeStart(value: string): void {
+    setStart(value)
+    invalidatePreview()
+  }
+
+  function changeEnd(value: string): void {
+    setEnd(value)
+    invalidatePreview()
+  }
+
+  function changeIncludeThreads(value: boolean): void {
+    setIncludeThreads(value)
+    invalidatePreview()
+  }
+
+  function togglePreviewSelection(message: ScanResult['messages'][number]): void {
+    setSelectedMessageKeys((keys) => togglePreviewMessage(keys, message))
+    setAcknowledged(false)
+    setTypedCount('')
+  }
+
+  function toggleAllPreviewSelection(): void {
+    if (!plan) return
+    setSelectedMessageKeys(allPreviewMessagesSelected
+      ? clearPreviewSelection()
+      : selectAllPreviewMessages(plan.candidates))
+    setAcknowledged(false)
+    setTypedCount('')
+  }
 
   function showError(error: unknown): void {
     setNotice(error instanceof Error ? error.message : '작업을 완료하지 못했습니다.')
@@ -139,46 +190,54 @@ export function App() {
     const startIso = toIsoDateTime(start)
     const endIso = toIsoDateTime(end)
     if (!startIso || !endIso || new Date(startIso) >= new Date(endIso)) {
-      setNotice('날짜 범위를 다시 확인해 주세요.')
+      setNotice('선택한 날짜 범위를 확인해 주세요.')
       return
     }
 
+    const requestGeneration = ++previewGeneration.current
     setBusy(true)
+    setScan(undefined)
+    setSelectedMessageKeys(clearPreviewSelection())
     setAcknowledged(false)
     setTypedCount('')
     setDeleteResult(undefined)
     setDeleteProgress(undefined)
     try {
-      setScan(await window.slackCleanup.scan({
+      const result = await window.slackCleanup.scan({
         channelIds: selectedIds,
         start: startIso,
         end: endIso,
         includeThreadReplies: includeThreads,
         excludeFileMessages
-      }))
-      setNotice('삭제하지 않고 미리보기만 생성했습니다.')
+      })
+      if (requestGeneration !== previewGeneration.current) return
+      setScan(result)
+      setSelectedMessageKeys(createPreviewSelection(result.messages))
+      setNotice('미리보기가 준비되었습니다. 삭제할 메시지를 선택해 주세요.')
     } catch (error) {
-      showError(error)
+      if (requestGeneration === previewGeneration.current) showError(error)
     } finally {
-      setBusy(false)
+      if (requestGeneration === previewGeneration.current) setBusy(false)
     }
   }
 
   async function deleteCandidates(): Promise<void> {
-    if (!scan || !plan || !canStartDeletion({ candidateCount: plan.candidates.length, acknowledgement: acknowledged, typedCount })) return
+    if (!scan || !plan || !canStartDeletion({ selectedCount: selectedMessages.length, acknowledgement: acknowledged, typedCount })) return
 
+    const messagesToDelete = [...selectedMessages]
     setBusy(true)
     setIsDeleting(true)
-    setDeleteProgress({ processed: 0, total: plan.candidates.length, deleted: 0, failed: 0, stopped: false })
+    setDeleteProgress({ processed: 0, total: messagesToDelete.length, deleted: 0, failed: 0, stopped: false })
     try {
       const result = await window.slackCleanup.deleteMessages({
         scanId: scan.scanId,
-        messages: [...plan.candidates],
-        confirmedCount: plan.candidates.length
+        messages: messagesToDelete,
+        confirmedCount: messagesToDelete.length
       })
       setDeleteResult(result)
       setNotice(`${result.deleted}개 삭제 완료, ${result.failed}개 실패`)
       setScan(undefined)
+      setSelectedMessageKeys(clearPreviewSelection())
       setAcknowledged(false)
       setTypedCount('')
     } catch (error) {
@@ -200,19 +259,13 @@ export function App() {
 
   function toggleConversation(id: string): void {
     setSelectedIds((ids) => ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id])
-    setScan(undefined)
-    setDeleteResult(undefined)
-    setDeleteProgress(undefined)
+    invalidatePreview()
   }
 
   function changeFileExclusion(exclude: boolean): void {
     setExcludeFileMessages(exclude)
-    setScan(undefined)
-    setAcknowledged(false)
-    setTypedCount('')
-    setDeleteResult(undefined)
-    setDeleteProgress(undefined)
-    setNotice('파일 첨부 메시지 제외 설정을 변경했습니다. 미리보기를 다시 생성해 주세요.')
+    invalidatePreview()
+    setNotice('파일 첨부 메시지 제외 설정이 변경되었습니다. 미리보기를 다시 생성해 주세요.')
   }
 
   if (!status.connected) {
@@ -283,6 +336,7 @@ export function App() {
                 type="checkbox"
                 checked={selectedIds.includes(conversation.id)}
                 onChange={() => toggleConversation(conversation.id)}
+                disabled={busy}
               />
               <span className="kind">{formatConversationKind(conversation.kind)}</span>
               <span>{conversation.kind === 'public_channel' || conversation.kind === 'private_channel' ? `#${conversation.name}` : conversation.name}</span>
@@ -296,15 +350,15 @@ export function App() {
         <div className="fields">
           <label>
             시작 시각
-            <input type="datetime-local" value={start} onChange={(event) => setStart(event.target.value)} />
+            <input type="datetime-local" value={start} onChange={(event) => changeStart(event.target.value)} disabled={busy} />
           </label>
           <label>
             종료 시각
-            <input type="datetime-local" value={end} onChange={(event) => setEnd(event.target.value)} />
+            <input type="datetime-local" value={end} onChange={(event) => changeEnd(event.target.value)} disabled={busy} />
           </label>
         </div>
         <label className="check">
-          <input type="checkbox" checked={includeThreads} onChange={(event) => setIncludeThreads(event.target.checked)} />
+          <input type="checkbox" checked={includeThreads} onChange={(event) => changeIncludeThreads(event.target.checked)} disabled={busy} />
           스레드 답글 포함
         </label>
         <label className="check">
@@ -327,29 +381,51 @@ export function App() {
           {scan?.inaccessibleChannelIds.length ? (
             <p className="warning">{scan.inaccessibleChannelIds.length}개의 대화는 권한 문제로 제외되었습니다.</p>
           ) : null}
+          <div className="preview-selection-summary">
+            <p><strong>{plan.candidates.length}개 중 {selectedMessages.length}개 선택</strong></p>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={allPreviewMessagesSelected}
+                ref={(input) => { if (input) input.indeterminate = somePreviewMessagesSelected }}
+                onChange={toggleAllPreviewSelection}
+                disabled={busy}
+                aria-label="미리보기 전체 선택"
+              />
+              미리보기 전체 선택
+            </label>
+          </div>
           <ul className="preview-list">
-            {plan.candidates.slice(0, 5).map((message) => (
-              <li key={`${message.channelId}:${message.ts}`}>
-                <span>{formatSlackTs(message.ts)}</span>
-                <span>{message.text || '(내용 없음)'}</span>
+            {plan.candidates.map((message) => (
+              <li key={messageKey(message)}>
+                <label className="preview-message">
+                  <input
+                    type="checkbox"
+                    checked={selectedMessageKeys.includes(messageKey(message))}
+                    onChange={() => togglePreviewSelection(message)}
+                    disabled={busy}
+                    aria-label={`${formatSlackTs(message.ts)} 메시지 선택`}
+                  />
+                  <span>{formatSlackTs(message.ts)}</span>
+                  <span>{message.text || '(내용 없음)'}</span>
+                </label>
               </li>
             ))}
           </ul>
-          {plan.candidates.length > 5 && <p className="hint">개인정보 노출을 줄이기 위해 처음 5개만 표시합니다.</p>}
           <label className="check">
             <input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />
             선택한 범위의 메시지를 영구 삭제한다는 점을 이해했습니다.
           </label>
           <label>
-            삭제할 개수 입력: {plan.candidates.length}
+            삭제할 선택 개수: {selectedMessages.length}
             <input inputMode="numeric" value={typedCount} onChange={(event) => setTypedCount(event.target.value)} />
           </label>
           <button
             className="delete"
             onClick={() => void deleteCandidates()}
-            disabled={busy || !canStartDeletion({ candidateCount: plan.candidates.length, acknowledgement: acknowledged, typedCount })}
+            disabled={busy || !canStartDeletion({ selectedCount: selectedMessages.length, acknowledgement: acknowledged, typedCount })}
           >
-            메시지 {plan.candidates.length}개 삭제
+            선택한 메시지 {selectedMessages.length}개 삭제
           </button>
           {isDeleting && deleteProgress && (
             <div className="progress" role="status">

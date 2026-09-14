@@ -35,11 +35,11 @@ export function buildCleanupPlan(input: CleanupPlanInput): CleanupPlan {
 }
 
 export function canStartDeletion(input: {
-  candidateCount: number
+  selectedCount: number
   acknowledgement: boolean
   typedCount: string
 }): boolean {
-  return input.candidateCount > 0
+  return input.selectedCount > 0
     && input.acknowledgement
-    && input.typedCount.trim() === String(input.candidateCount)
+    && input.typedCount.trim() === String(input.selectedCount)
 }

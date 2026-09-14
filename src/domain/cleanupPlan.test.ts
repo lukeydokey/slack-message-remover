@@ -23,13 +23,16 @@ describe('buildCleanupPlan', () => {
 })
 
 describe('canStartDeletion', () => {
-  it('requires the exact displayed count and an explicit acknowledgement', () => {
-    expect(canStartDeletion({ candidateCount: 3, acknowledgement: true, typedCount: '3' })).toBe(true)
-    expect(canStartDeletion({ candidateCount: 3, acknowledgement: true, typedCount: '2' })).toBe(false)
-    expect(canStartDeletion({ candidateCount: 3, acknowledgement: false, typedCount: '3' })).toBe(false)
+  it('requires the exact selected count and an explicit acknowledgement', () => {
+    expect(canStartDeletion({ selectedCount: 2, acknowledgement: true, typedCount: '2' })).toBe(true)
+    expect(canStartDeletion({ selectedCount: 2, acknowledgement: true, typedCount: '3' })).toBe(false)
+    expect(canStartDeletion({ selectedCount: 2, acknowledgement: false, typedCount: '2' })).toBe(false)
+  })
+
+  it('does not allow deletion with an empty selection', () => {
+    expect(canStartDeletion({ selectedCount: 0, acknowledgement: true, typedCount: '0' })).toBe(false)
   })
 })
-
 describe('IPC validation', () => {
   it('accepts only Slack-style client ids', () => {
     expect(validateClientId('123456789.987654321')).toBe('123456789.987654321')

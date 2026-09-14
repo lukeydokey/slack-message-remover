@@ -278,4 +278,34 @@ describe('slack:scan file exclusion', () => {
       `channel=${textMessage.channelId}&ts=${textMessage.ts}`
     ])
   })
+  it('deletes only the selected subset of a valid preview', async () => {
+    const secondTextMessage = { ...textMessage, ts: '1788220802.000001', text: 'second text' }
+    const thirdTextMessage = { ...textMessage, ts: '1788220803.000001', text: 'third text' }
+    const { calls, scan, deleteMessages } = await loadMain({
+      'conversations.history': [
+        {
+          ok: true,
+          messages: [
+            { ts: textMessage.ts, user: credential.userId, text: textMessage.text },
+            { ts: secondTextMessage.ts, user: credential.userId, text: secondTextMessage.text },
+            { ts: thirdTextMessage.ts, user: credential.userId, text: thirdTextMessage.text }
+          ],
+          response_metadata: {}
+        }
+      ]
+    })
+    const scanResult = await scan({ ...scanRequest, includeThreadReplies: false })
+
+    const result = await deleteMessages({
+      scanId: scanResult.scanId,
+      messages: [scanResult.messages[0], scanResult.messages[2]],
+      confirmedCount: 2
+    })
+
+    expect(result).toMatchObject({ deleted: 2, failed: 0 })
+    expect(calls.filter((call) => call.method === 'chat.delete').map((call) => call.body)).toEqual([
+      `channel=${textMessage.channelId}&ts=${textMessage.ts}`,
+      `channel=${thirdTextMessage.channelId}&ts=${thirdTextMessage.ts}`
+    ])
+  })
 })

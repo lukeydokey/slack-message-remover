@@ -260,3 +260,42 @@ button:disabled {
     grid-template-columns: 18px 58px 1fr;
   }
 }
+
+.preview-selection-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.preview-selection-summary p {
+  margin-bottom: 0;
+}
+
+.preview-message {
+  display: grid;
+  grid-template-columns: 18px minmax(150px, 220px) 1fr;
+  gap: 12px;
+  align-items: center;
+  margin: 0;
+  font-weight: 520;
+}
+
+.preview-message input {
+  width: auto;
+  margin: 0;
+}
+
+@media (max-width: 700px) {
+  .preview-selection-summary {
+    display: block;
+  }
+
+  .preview-message {
+    grid-template-columns: 18px 1fr;
+  }
+
+  .preview-message span:last-child {
+    grid-column: 2;
+  }
+}
